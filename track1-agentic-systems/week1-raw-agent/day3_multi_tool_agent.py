@@ -1,8 +1,17 @@
+import time
+
 from vehicle_issues_lookup import fetch_recalls, fetch_complaints
 from llm_client import call_llm_with_retries
 from dtc_lookup import search_dtc
 
 import json
+
+MAX_ITERATIONS  = 5
+MAX_ELAPSED_TIME = 60  # seconds
+ # Pricing constants for Claude Haiku 4.5
+HAIKU_INPUT_COST_PER_TOKEN = 1.00 / 1_000_000
+HAIKU_OUTPUT_COST_PER_TOKEN = 5.00 / 1_000_000
+
 
 VEHICLE_TOOLS = [
     {
@@ -105,65 +114,90 @@ def dispatch_tool(tool_name: str, tool_input: dict) -> dict:
     tool_function = TOOL_DISPATCHER[tool_name]
     return tool_function(**tool_input)
 
-
 # -----------------------------------------------------------------------------
 # Agent
 # -----------------------------------------------------------------------------
 
-def run_vehicle_agent(user_message: str) -> str:
-    """
-    Run the vehicle agent with the given user message.
+def force_final_answer(messages: list[dict], reason: str) -> tuple[str, int, int]:
+    if reason == "timeout":
+        prompt_reason = "You have reached your execution time limit."
+    else:
+        prompt_reason = "You have reached your maximum tool invocation limit."
 
-    The agent continues calling the LLM and dispatching tools until
-    the LLM produces a final response.
-    """
+    messages.append({
+        "role": "user",
+        "content": f"{prompt_reason} Please provide your final answer based on the information gathered so far."
+    })
+    
+    final_response = call_llm_with_retries(messages)  # Exclude tools
+    
+    text_block = next(
+        block for block in final_response.content if block.type == "text"
+    )
+    return (
+        text_block.text,
+        final_response.usage.input_tokens,
+        final_response.usage.output_tokens
+    )
 
-    messages = [
-        {
-            "role": "user",
-            "content": user_message,
-        }
-    ]
+
+def run_vehicle_agent(user_message: str) -> dict:
+    messages = [{"role": "user", "content": user_message}]
+    
+    iteration_count = 0
+    total_input_tokens = 0
+    total_output_tokens = 0
+    start_time = time.monotonic()
 
     while True:
-        # -------------------------------------------------------------
-        # 1. Ask the LLM what to do next
-        # -------------------------------------------------------------
-        response = call_llm_with_retries(
-            messages,
-            tools=VEHICLE_TOOLS,
-        )
+        elapsed_time = time.monotonic() - start_time
+        
+        # Determine if any guard condition was triggered
+        hit_max_iterations = iteration_count >= MAX_ITERATIONS
+        hit_timeout = elapsed_time >= MAX_ELAPSED_TIME
 
-        # -------------------------------------------------------------
-        # 2. Add Claude's response to the conversation
-        # -------------------------------------------------------------
-        messages.append(
-            {
-                "role": "assistant",
-                "content": response.content,
+        if hit_max_iterations or hit_timeout:
+            reason = "timeout" if hit_timeout else "max_iterations"
+            final_text, final_in, final_out = force_final_answer(messages, reason=reason)
+            
+            total_input_tokens += final_in
+            total_output_tokens += final_out
+            
+            return {
+                "response": final_text,
+                "usage": {
+                    "input_tokens": total_input_tokens,
+                    "output_tokens": total_output_tokens,
+                    "total_tokens": total_input_tokens + total_output_tokens,
+                    "cost_usd": calculate_cost_usd(total_input_tokens, total_output_tokens)
+                }
             }
-        )
 
-        # -------------------------------------------------------------
-        # 3. If Claude is done, return the final answer
-        # -------------------------------------------------------------
+        iteration_count += 1
+        response = call_llm_with_retries(messages, tools=VEHICLE_TOOLS)
+
+        total_input_tokens += response.usage.input_tokens
+        total_output_tokens += response.usage.output_tokens
+
+        messages.append({"role": "assistant", "content": response.content})
+
         if response.stop_reason == "end_turn":
             text_block = next(
-                block
-                for block in response.content
-                if block.type == "text"
+                block for block in response.content if block.type == "text"
             )
-            return text_block.text
+            return {
+                "response": text_block.text,
+                "usage": {
+                    "input_tokens": total_input_tokens,
+                    "output_tokens": total_output_tokens,
+                    "total_tokens": total_input_tokens + total_output_tokens,
+                    "cost_usd": calculate_cost_usd(total_input_tokens, total_output_tokens)
+                }
+            }
 
-        # -------------------------------------------------------------
-        # 4. Claude wants to use one or more tools
-        # -------------------------------------------------------------
         if response.stop_reason == "tool_use":
-
             tool_results = []
-
             for content_block in response.content:
-
                 if content_block.type != "tool_use":
                     continue
 
@@ -171,52 +205,26 @@ def run_vehicle_agent(user_message: str) -> str:
                 tool_input = content_block.input
                 tool_use_id = content_block.id
 
-                print(f"Calling tool: {tool_name}")
-                print(f"Input: {tool_input}")
-
-                # -----------------------------------------------------
-                # 5. Execute the tool
-                # -----------------------------------------------------
                 try:
-                    result = dispatch_tool(
-                        tool_name,
-                        tool_input,
-                    )
-
+                    result = dispatch_tool(tool_name, tool_input)
                 except Exception as exc:
-                    result = {
-                        "error": str(exc),
-                    }
+                    result = {"error": str(exc)}
 
-                # -----------------------------------------------------
-                # 6. Give the tool result back to Claude
-                # -----------------------------------------------------
                 if result is None:
                     result = {"error": f"DTC code {tool_input.get('dtc_code')} not found."}
 
-                tool_results.append(
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": tool_use_id,
-                        "content": json.dumps(result),
-                    }
-                )
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": tool_use_id,
+                    "content": json.dumps(result),
+                })
 
-            messages.append(
-                {
-                    "role": "user",
-                    "content": tool_results,
-                }
-            )
-
-            # -------------------------------------------------------------
-            # 7. Continue the loop
-            # -------------------------------------------------------------
+            messages.append({"role": "user", "content": tool_results})
             continue
 
-        # -------------------------------------------------------------
-        # Unexpected stop reason
-        # -------------------------------------------------------------
-        raise RuntimeError(
-            f"Unexpected stop reason: {response.stop_reason}"
-        )
+        raise RuntimeError(f"Unexpected stop reason: {response.stop_reason}")
+
+       
+def calculate_cost_usd(input_tokens: int, output_tokens: int) -> float:
+    """Calculate the estimated cost in USD for token usage."""
+    return (input_tokens * HAIKU_INPUT_COST_PER_TOKEN) + (output_tokens * HAIKU_OUTPUT_COST_PER_TOKEN)
