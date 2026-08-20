@@ -1,5 +1,7 @@
 from vehicle_issues_lookup import fetch_recalls, fetch_complaints
 from llm_client import call_llm_with_retries
+from dtc_lookup import search_dtc
+
 import json
 
 VEHICLE_TOOLS = [
@@ -53,6 +55,27 @@ VEHICLE_TOOLS = [
             "required": ["make", "model", "year"],
         },
     },
+    {
+    "name": "search_dtc",
+    "description": (
+        "Look up a vehicle diagnostic trouble code (DTC) "
+        "and return its details."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "dtc_code": {
+                "type": "string",
+                "description": (
+                    "The diagnostic trouble code to look up, "
+                    "for example U0100 or P0171."
+                ),
+            }
+        },
+        "required": ["dtc_code"],
+    },
+}
+
 ]
 
 # -----------------------------------------------------------------------------
@@ -62,6 +85,7 @@ VEHICLE_TOOLS = [
 TOOL_DISPATCHER = {
     "fetch_recalls": fetch_recalls,
     "fetch_complaints": fetch_complaints,
+    "search_dtc": search_dtc,
 }
 
 def dispatch_tool(tool_name: str, tool_input: dict) -> dict:
@@ -167,6 +191,9 @@ def run_vehicle_agent(user_message: str) -> str:
                 # -----------------------------------------------------
                 # 6. Give the tool result back to Claude
                 # -----------------------------------------------------
+                if result is None:
+                    result = {"error": f"DTC code {tool_input.get('dtc_code')} not found."}
+
                 tool_results.append(
                     {
                         "type": "tool_result",
