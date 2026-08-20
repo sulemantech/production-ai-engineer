@@ -198,6 +198,7 @@ def run_vehicle_agent(user_message: str) -> dict:
         if response.stop_reason == "tool_use":
             tool_results = []
             for content_block in response.content:
+                is_error = False
                 if content_block.type != "tool_use":
                     continue
 
@@ -209,12 +210,15 @@ def run_vehicle_agent(user_message: str) -> dict:
                     result = dispatch_tool(tool_name, tool_input)
                 except Exception as exc:
                     result = {"error": str(exc)}
-
+                    is_error = True
+              
                 if result is None:
+                    is_error = True
                     result = {"error": f"DTC code {tool_input.get('dtc_code')} not found."}
 
                 tool_results.append({
                     "type": "tool_result",
+                    "is_error": is_error,
                     "tool_use_id": tool_use_id,
                     "content": json.dumps(result),
                 })
