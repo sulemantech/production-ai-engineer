@@ -3,7 +3,7 @@ import time
 from vehicle_issues_lookup import fetch_recalls, fetch_complaints
 from llm_client import call_llm_with_retries
 from dtc_lookup import search_dtc
-
+from vin_decoder import decode_vin_code
 import json
 
 MAX_ITERATIONS  = 5
@@ -15,6 +15,7 @@ HAIKU_OUTPUT_COST_PER_TOKEN = 5.00 / 1_000_000
 
 VEHICLE_TOOLS = [
     {
+
         "name": "fetch_recalls",
         "description": (
             "Fetch recall information from NHTSA for a vehicle "
@@ -83,7 +84,24 @@ VEHICLE_TOOLS = [
         },
         "required": ["dtc_code"],
     },
-}
+},
+{
+    "name": "decode_vin_code",
+    "description": (
+        "Decode a VIN code and return vehicle information."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "vin": {
+                "type": "string",
+                "description": "The VIN code to decode."
+            }
+        },
+        "required": ["vin"]
+    }
+},
+
 
 ]
 
@@ -95,6 +113,7 @@ TOOL_DISPATCHER = {
     "fetch_recalls": fetch_recalls,
     "fetch_complaints": fetch_complaints,
     "search_dtc": search_dtc,
+    "decode_vin_code": decode_vin_code,
 }
 
 def dispatch_tool(tool_name: str, tool_input: dict) -> dict:
