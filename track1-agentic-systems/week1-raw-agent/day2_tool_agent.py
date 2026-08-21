@@ -1,24 +1,8 @@
 import json
-import random
-import time
-
-import anthropic
-from dotenv import load_dotenv
 
 from dtc_lookup import search_dtc
 
 from llm_client import call_llm_with_retries
-
-MODEL = "claude-haiku-4-5"
-MAX_RETRIES = 5
-BASE_DELAY = 1.0
-MAX_TOKENS = 1024
-
-
-load_dotenv()
-
-client = anthropic.Anthropic()
-
 
 search_dtc_tool = {
     "name": "search_dtc",
