@@ -55,7 +55,19 @@ Working raw-API agent (3 tools), loop guards, cost tracking, and a written archi
 
 ## Notes / Artifacts
 
-_Log work, links, and outcomes for this week here as you go._
+**Status: complete.** Day-by-day record, reconstructed from commit history:
+
+- **2026-08-16 — Day 1:** Raw Anthropic API call, no tools — streaming plus retry/backoff (`day1_raw_call.py`).
+- **2026-08-18 — Day 2:** First tool. `dtc_lookup.py` (OBDeX-backed DTC lookup) wired into a single-tool agent loop (`day2_tool_agent.py`).
+- **2026-08-20 — Day 3:** Second and third tools — `vehicle_issues_lookup.py` (NHTSA recalls/complaints) — merged with DTC lookup into one multi-tool agent (`day3_multi_tool_agent.py`). Shared LLM retry client extracted out of Day 1/2 and reused across all scripts.
+- **2026-08-20 — Day 4:** Loop guards added (max iterations, timeout, cost tracking) and tool results marked with `is_error: true` on the `tool_result` block so Claude gets failure as structured signal, not inferred from text.
+- **2026-08-21 — Day 6-7 (polish):** Day 1-2 scripts cleaned up; architecture write-up added above ("How my agent loop works"); a fourth tool added (`vin_decoder.py`, NHTSA vPIC VIN decoding), normalizing success/warning/error into one consistent shape.
+
+**Milestone met:** working raw-API agent (4 tools: DTC lookup, recalls, complaints, VIN decode), loop guards, cost tracking, written architecture explanation.
+
+**Interview drilling:** 4 reps logged in `INTERVIEW_LOG.md` (loop guards/infinite loops, message→tool-call walkthrough, tool-call-vs-function-call boundary, malformed tool data) — all under Day 4. Days 1-3 have no logged reps.
+
+**Known gap carried into Week 2:** tools run sequentially, not in parallel — a query needing all four tools takes ~30s+. Candidate to revisit once LangGraph's parallel branching is in play.
 
 ---
 [← Track 1](../README.md) · [Next: Week 2 — LangGraph →](../week2-langgraph/README.md)
