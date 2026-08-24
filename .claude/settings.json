@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git fetch *)",
+      "Bash(git ls-remote *)",
+      "Bash(git remote *)",
+      "Skill(claude-api)",
+      "Skill(claude-api:*)",
+      "Bash(pip install *)",
+      "Bash(python day1_raw_call.py)",
+      "Bash(git commit -m ' *)",
+      "Bash(python -c ' *)"
+    ]
+  }
+}
