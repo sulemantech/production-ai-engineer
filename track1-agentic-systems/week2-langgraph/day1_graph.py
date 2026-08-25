@@ -1,7 +1,10 @@
 from dtc_lookup import search_dtc
+from operator import add
 from vehicle_issues_lookup import fetch_recalls, fetch_complaints
 from vin_decoder import decode_vin_code
 from llm_client import call_llm_with_retries
+from IPython.display import Image, display
+
 
 
 from typing import Annotated
@@ -11,6 +14,53 @@ from typing_extensions import TypedDict  # Or 'from typing import TypedDict' in 
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages  # Changed to plural 'add_messages'
 
+
+# -----------------------------------------------------------------------------
+# Graph Flow
+#
+#                         ┌──────────────┐
+#                         │    START     │
+#                         └──────┬───────┘
+#                                │
+#                                ▼
+#                         ┌──────────────┐
+#                         │     MODEL    │
+#                         │              │
+#                         │ Decide what  │
+#                         │ to do next   │
+#                         └──────┬───────┘
+#                                │
+#                         should_continue()
+#                                │
+#                         ┌──────┴──────┐
+#                         │             │
+#                     "tools"          END
+#                         │             │
+#                         ▼             ▼
+#                  ┌──────────────┐   ┌─────┐
+#                  │     TOOLS    │   │ END │
+#                  │              │   └─────┘
+#                  │ Execute the  │
+#                  │ requested    │
+#                  │ Python tool  │
+#                  └──────┬───────┘
+#                         │
+#                         │ tool result
+#                         │
+#                         └──────────────► MODEL
+#
+# Main agent loop:
+#
+#              ┌─────────────────────────────┐
+#              │                             │
+#              ▼                             │
+#            MODEL → TOOLS → MODEL → TOOLS ──┘
+#              │
+#              └──────────────→ END
+#
+# The model keeps deciding whether it needs another tool.
+# Once it no longer requests a tool, the graph ends.
+# -----------------------------------------------------------------------------
 
 VEHICLE_TOOLS = [
     {
@@ -117,7 +167,7 @@ TOOL_DISPATCHER = {
 
 
 class AgentState(TypedDict):  # Fixed 'TypeDict' to 'TypedDict'
-    messages: Annotated[list, add_messages]
+    messages: Annotated[list, add]
 
 
 def call_model(state):
@@ -125,18 +175,18 @@ def call_model(state):
         state["messages"], 
         tools=VEHICLE_TOOLS
         )
-    return {"message:"[response]}
+    message = {"role": "assistant", "content": response.content}
+    return {"messages": [message]}
 
 
 #----------------------------------------------------------------------
 # Router
 #----------------------------------------------------------------------
 
-def should_continue(state:AgentState):
-    response = state["messages"][-1]
-    if response.stop_reason == "tool_use":
+def should_continue(state: AgentState):
+    content = state["messages"][-1]["content"]
+    if any(block.type == "tool_use" for block in content):
         return "tools"
-
     return END
 
 #---------------------------------------------------------------------
@@ -144,11 +194,11 @@ def should_continue(state:AgentState):
 #---------------------------------------------------------------------
 
 def execute_tools(state:AgentState):
-    response = state["messages"][-1]
+    response = state["messages"][-1]["content"]
 
     tool_results = []
 
-    for block in response.content:
+    for block in response:
         if block.type != "tool_use":
             continue
 
@@ -158,12 +208,13 @@ def execute_tools(state:AgentState):
 
         print(f"Executing tool: {tool_name}")
         print(f"Input: {tool_input}")
-
+        is_error = False
         tool_function = TOOL_DISPATCHER.get(tool_name, None)
         if tool_function is None:
             result = {
                 "error": f"Unknown tool: {tool_name}",
             }
+            is_error = True
         else:
             try:
                 result = tool_function(**tool_input)
@@ -171,21 +222,23 @@ def execute_tools(state:AgentState):
                 result = {
                     "error": str(e)
                 }
-        tool_results.append({
+                is_error = True
+        tool_results.append(
             {
                 "type": "tool_result",
+                "is_error": is_error, 
                 "tool_use_id": tool_use_id,
                 "content": str(result),
-            }
+            
         })
-        return {
-            "messages":[
-                {
-                    "role": "user",
-                    "content": tool_results,
-                }
-            ]
-        }
+    return {
+        "messages":[
+            {
+                "role": "user",
+                "content": tool_results,
+            }
+        ]
+    }
 
 #----------------------------------------------------------------------
 # Build graph
@@ -220,4 +273,12 @@ graph.add_edge(
 )
 
 app = graph.compile()
+# display(Image(app.get_graph().draw_mermaid_png("day1_graph")), "")
 
+if __name__ == "__main__":
+    result = app.invoke({
+        "messages": [{"role": "user", "content": "What does DTC code P0171 mean?"}]
+    })
+    for msg in result["messages"]:
+        print(msg)
+    display(Image(app.get_graph().draw_mermaid_png(output_file_path="day1_graph.png")))
