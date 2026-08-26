@@ -1,4 +1,5 @@
 langgraph
+langgraph-checkpoint-sqlite
 langchain-core
 anthropic
 python-dotenv
