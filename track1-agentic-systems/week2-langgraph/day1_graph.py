@@ -175,7 +175,8 @@ def call_model(state):
         state["messages"], 
         tools=VEHICLE_TOOLS
         )
-    message = {"role": "assistant", "content": response.content}
+    content = [block.model_dump() for block in response.content]
+    message = {"role": "assistant", "content": content}
     return {"messages": [message]}
 
 
@@ -185,7 +186,7 @@ def call_model(state):
 
 def should_continue(state: AgentState):
     content = state["messages"][-1]["content"]
-    if any(block.type == "tool_use" for block in content):
+    if any(block["type"] == "tool_use" for block in content):
         return "tools"
     return END
 
@@ -199,13 +200,12 @@ def execute_tools(state:AgentState):
     tool_results = []
 
     for block in response:
-        if block.type != "tool_use":
+        if block["type"] != "tool_use":
             continue
 
-        tool_name = block.name
-        tool_input = block.input
-        tool_use_id = block.id
-
+        tool_name = block["name"]
+        tool_input = block["input"]
+        tool_use_id = block["id"]
         print(f"Executing tool: {tool_name}")
         print(f"Input: {tool_input}")
         is_error = False
