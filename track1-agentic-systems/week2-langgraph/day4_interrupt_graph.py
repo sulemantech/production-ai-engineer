@@ -11,26 +11,25 @@ from langgraph.types import interrupt, Command
 # checkpointer pattern (SqliteSaver, thread_id-keyed), and adds one new
 # piece: a human-approval gate before a "risky" tool actually runs.
 #
-#            ┌──────────────┐
-#     START ─▶     model     │◀────────────┐
-#            └──────┬───────┘             │
-#                    │                     │
-#             should_continue()            │
-#                    │                     │
-#           ┌────────┴────────┐            │
-#           │                 │            │
-#        "tools"             END           │
-#           │                               │
-#           ▼                               │
-#   ┌─────────────────┐                     │
-#   │ request_approval │  <- NEW: calls interrupt()
-#   │ if tool is risky │     if the requested tool is in
-#   └────────┬─────────┘     RISKY_TOOLS, else passes through
-#            │
-#     approved? ──── declined ──▶ back to model with a decline message
-#            │
-#            ▼
-#          tools ──────────────────────────▶ model (loop, unchanged)
+#     ┌──▶ model ──▶ should_continue()
+#     │                  │
+#     │        ┌─────────┴─────────┐
+#     │        │                   │
+#     │     "tools"                END
+#     │        │
+#     │        ▼
+#     │  request_approval          <- calls interrupt() if the requested
+#     │        │                      tool is in RISKY_TOOLS, else
+#     │  route_after_approval()      auto-passes with human_approved=True
+#     │        │
+#     │  ┌─────┴──────┐
+#     │  │            │
+#     │ tools    handle_decline    <- adds a message telling Claude
+#     │  │            │               the human declined
+#     │  └─────┬──────┘
+#     │        │
+#     └────────┘
+#          (both loop back to model)
 #
 # -----------------------------------------------------------------------------
 
@@ -47,7 +46,7 @@ def request_approval(state):
     last_message = state["messages"][-1]
     
     tool_use_blocks = [
-        block for block in last_message.get("blocks", [])
+        block for block in last_message.get("content", [])
         if block["type"] == "tool_use"
     ]
     risky_tools_requested = [
@@ -72,18 +71,14 @@ def route_after_approval(state):
     if state.get("human_approved", False):
         return "tools"
     else:
-        # Inject a message indicating the human declined the risky tool execution
-        decline_message = {
-            "role": "system",
-            "content": [
-                {
-                    "type": "text",
-                    "text": "Human approval denied execution of the requested risky tools."
-                }
-            ]
-        }
-        state["messages"].append(decline_message)
-        return "model"
+        return "handle_decline"
+
+def handle_decline(state):
+    decline_message = {
+        "role": "user",
+        "content": [{"type": "text", "text": "Human approval denied execution of the requested risky tools."}]
+    }
+    return {"messages": [decline_message]}
 
 # TODO: wire request_approval into the graph between "model" and "tools",
 # and compile with a SqliteSaver checkpointer (same as day3_checkpointed_graph.py).
@@ -91,23 +86,23 @@ def route_after_approval(state):
 # TODO: test the same two-step way as Day 3/the hospitality drill —
 # first invoke() should return with __interrupt__ present when a risky
 # tool is requested, second invoke(Command(resume=...)) should complete it.
+graph = StateGraph(AgentState)  # a fresh builder, shadowing nothing from day1_graph
 
-graph = StateGraph(AgentState)
 graph.add_node("model", call_model)
 graph.add_node("request_approval", request_approval)
 graph.add_node("tools", execute_tools)
+graph.add_node("handle_decline", handle_decline)
+graph.add_edge("handle_decline", "model")
 
 graph.add_edge(START, "model")
-graph.add_conditional_edges(
-    "model",
-    should_continue,
-    {"tools": "request_approval", END: END},  # redirect through the gate
-)
-graph.add_conditional_edges(
-    "request_approval",
-    route_after_approval,
-    {"tools": "tools", "model": "model"},
-)
+graph.add_conditional_edges("model", should_continue, {"tools": "request_approval", END: END})
+graph.add_conditional_edges("request_approval", 
+                            route_after_approval, 
+                            {"tools": "tools", 
+                             "handle_decline": "handle_decline"
+                             })
+graph.add_edge("handle_decline", "model")
+
 graph.add_edge("tools", "model")
 
 with SqliteSaver.from_conn_string("checkpoints.db") as checkpointer:
