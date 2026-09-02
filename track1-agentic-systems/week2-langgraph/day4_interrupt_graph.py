@@ -92,7 +92,6 @@ graph.add_node("model", call_model)
 graph.add_node("request_approval", request_approval)
 graph.add_node("tools", execute_tools)
 graph.add_node("handle_decline", handle_decline)
-graph.add_edge("handle_decline", "model")
 
 graph.add_edge(START, "model")
 graph.add_conditional_edges("model", should_continue, {"tools": "request_approval", END: END})
@@ -108,3 +107,42 @@ graph.add_edge("tools", "model")
 with SqliteSaver.from_conn_string("checkpoints.db") as checkpointer:
     checkpointer.setup()
     app = graph.compile(checkpointer=checkpointer)
+
+
+with SqliteSaver.from_conn_string("checkpoints.db") as checkpointer:
+    checkpointer.setup()
+    app = graph.compile(checkpointer=checkpointer)
+
+    if __name__ == "__main__":
+        
+        config = {"configurable": {"thread_id": "day4-test-2"}}
+
+        # Case without risky tools: should run through without interruption
+        # result1 = app.invoke(
+        #     {"messages": [{"role": "user", "content": "Decode VIN 1HGCM82633A004352"}]},
+        #     config=config,
+        # )
+        # print("--- First response (should be paused with __interrupt__) ---")
+        # print(result1)
+
+        # print(result1["messages"][-1])
+
+        # result2 = app.invoke(Command(resume=True), config=config)
+        # print("--- Second response (should reference the P0171 answer) ---")
+        # print(result2["messages"][-1])
+
+        # Case with risky tools: should trigger interrupt
+        result1 = app.invoke(
+            {"messages": [{"role": "user", "content": "Decode VIN 1HGCM82633A004352"}]},
+            config=config,
+        )
+        print("--- PAUSED FOR APPROVAL ---")
+        print(result1["__interrupt__"])
+
+        answer = input("Approve this? (y/n): ").strip().lower()
+        decision = answer == "y"
+
+        result2 = app.invoke(Command(resume=decision), config=config)
+        print("--- Resumed ---")
+        print(result2["messages"][-1])
+
