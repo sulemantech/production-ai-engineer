@@ -55,4 +55,22 @@ parent.add_edge(START, "model")
 parent.add_conditional_edges("model", should_continue, {"tools": "gated_tool_execution", END: END})
 parent.add_edge("gated_tool_execution", "model")
 
+with SqliteSaver.from_conn_string("checkpoints.db") as checkpointer:
+    checkpointer.setup()
+    app = parent.compile(checkpointer=checkpointer)
+
+    if __name__ == "__main__":
+        config = {"configurable": {"thread_id": "day5-test-1"}}
+        result1 = app.invoke(
+            {"messages": [{"role": "user", "content": "Decode VIN 1HGCM82633A004352"}]},
+            config=config,
+        )
+        print("--- Paused? ---")
+        print(result1)
+
+        answer = input("Approve this? (y/n): ").strip().lower()
+        result2 = app.invoke(Command(resume=answer == "y"), config=config)
+        print("--- Resumed ---")
+        print(result2["messages"][-1])
+
 
