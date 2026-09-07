@@ -1,0 +1,315 @@
+{
+  "customers": [
+    {
+      "customer_id": "CUST001",
+      "name": "Ahmed Khan",
+      "email": "ahmed@example.com",
+      "risk_level": "low"
+    },
+    {
+      "customer_id": "CUST002",
+      "name": "Sara Ali",
+      "email": "sara.ali@example.com",
+      "risk_level": "medium"
+    },
+    {
+      "customer_id": "CUST003",
+      "name": "John Smith",
+      "email": "john.smith@example.com",
+      "risk_level": "low"
+    },
+    {
+      "customer_id": "CUST004",
+      "name": "Fatima Noor",
+      "email": "fatima.noor@example.com",
+      "risk_level": "high"
+    },
+    {
+      "customer_id": "CUST005",
+      "name": "David Chen",
+      "email": "david.chen@example.com",
+      "risk_level": "low"
+    },
+    {
+      "customer_id": "CUST006",
+      "name": "Maria Garcia",
+      "email": "maria.garcia@example.com",
+      "risk_level": "medium"
+    }
+  ],
+
+  "accounts": [
+    {
+      "account_id": "ACC001",
+      "customer_id": "CUST001",
+      "account_type": "checking",
+      "currency": "USD",
+      "balance": 4250.75,
+      "status": "active"
+    },
+    {
+      "account_id": "ACC002",
+      "customer_id": "CUST002",
+      "account_type": "savings",
+      "currency": "USD",
+      "balance": 12000.00,
+      "status": "active"
+    },
+    {
+      "account_id": "ACC003",
+      "customer_id": "CUST002",
+      "account_type": "checking",
+      "currency": "USD",
+      "balance": 850.20,
+      "status": "active"
+    },
+    {
+      "account_id": "ACC004",
+      "customer_id": "CUST003",
+      "account_type": "checking",
+      "currency": "EUR",
+      "balance": 3100.50,
+      "status": "active"
+    },
+    {
+      "account_id": "ACC005",
+      "customer_id": "CUST004",
+      "account_type": "checking",
+      "currency": "USD",
+      "balance": 200.00,
+      "status": "frozen"
+    },
+    {
+      "account_id": "ACC006",
+      "customer_id": "CUST005",
+      "account_type": "savings",
+      "currency": "USD",
+      "balance": 25000.00,
+      "status": "active"
+    },
+    {
+      "account_id": "ACC007",
+      "customer_id": "CUST006",
+      "account_type": "checking",
+      "currency": "GBP",
+      "balance": 1450.30,
+      "status": "active"
+    },
+    {
+      "account_id": "ACC008",
+      "customer_id": "CUST003",
+      "account_type": "savings",
+      "currency": "EUR",
+      "balance": 9800.00,
+      "status": "active"
+    }
+  ],
+
+  "transactions": [
+    {
+      "transaction_id": "TXN1001",
+      "account_id": "ACC001",
+      "type": "card_payment",
+      "merchant": "Amazon",
+      "amount": 129.99,
+      "currency": "USD",
+      "timestamp": "2026-09-06T14:32:00",
+      "status": "completed"
+    },
+    {
+      "transaction_id": "TXN1002",
+      "account_id": "ACC001",
+      "type": "card_payment",
+      "merchant": "Amazon",
+      "amount": 129.99,
+      "currency": "USD",
+      "timestamp": "2026-09-06T14:33:15",
+      "status": "completed"
+    },
+    {
+      "transaction_id": "TXN1003",
+      "account_id": "ACC001",
+      "type": "atm_withdrawal",
+      "merchant": "ATM - Main St Branch",
+      "amount": 200.00,
+      "currency": "USD",
+      "timestamp": "2026-09-05T09:10:00",
+      "status": "completed"
+    },
+    {
+      "transaction_id": "TXN1004",
+      "account_id": "ACC002",
+      "type": "transfer",
+      "merchant": "Internal Transfer - ACC003",
+      "amount": 500.00,
+      "currency": "USD",
+      "timestamp": "2026-09-04T11:00:00",
+      "status": "completed"
+    },
+    {
+      "transaction_id": "TXN1005",
+      "account_id": "ACC003",
+      "type": "card_payment",
+      "merchant": "Starbucks",
+      "amount": 6.75,
+      "currency": "USD",
+      "timestamp": "2026-09-06T08:15:00",
+      "status": "completed"
+    },
+    {
+      "transaction_id": "TXN1006",
+      "account_id": "ACC003",
+      "type": "card_payment",
+      "merchant": "Uber",
+      "amount": 18.40,
+      "currency": "USD",
+      "timestamp": "2026-09-06T19:22:00",
+      "status": "completed"
+    },
+    {
+      "transaction_id": "TXN1007",
+      "account_id": "ACC004",
+      "type": "card_payment",
+      "merchant": "Carrefour",
+      "amount": 84.10,
+      "currency": "EUR",
+      "timestamp": "2026-09-03T16:45:00",
+      "status": "completed"
+    },
+    {
+      "transaction_id": "TXN1008",
+      "account_id": "ACC004",
+      "type": "card_payment",
+      "merchant": "Carrefour",
+      "amount": 84.10,
+      "currency": "EUR",
+      "timestamp": "2026-09-03T16:46:30",
+      "status": "completed"
+    },
+    {
+      "transaction_id": "TXN1009",
+      "account_id": "ACC005",
+      "type": "card_payment",
+      "merchant": "Unknown Merchant XZ",
+      "amount": 950.00,
+      "currency": "USD",
+      "timestamp": "2026-09-02T02:14:00",
+      "status": "flagged"
+    },
+    {
+      "transaction_id": "TXN1010",
+      "account_id": "ACC005",
+      "type": "card_payment",
+      "merchant": "Unknown Merchant XZ",
+      "amount": 950.00,
+      "currency": "USD",
+      "timestamp": "2026-09-02T02:15:10",
+      "status": "flagged"
+    },
+    {
+      "transaction_id": "TXN1011",
+      "account_id": "ACC006",
+      "type": "transfer",
+      "merchant": "External Wire Transfer",
+      "amount": 5000.00,
+      "currency": "USD",
+      "timestamp": "2026-08-30T10:00:00",
+      "status": "completed"
+    },
+    {
+      "transaction_id": "TXN1012",
+      "account_id": "ACC007",
+      "type": "card_payment",
+      "merchant": "Tesco",
+      "amount": 42.60,
+      "currency": "GBP",
+      "timestamp": "2026-09-05T13:20:00",
+      "status": "completed"
+    },
+    {
+      "transaction_id": "TXN1013",
+      "account_id": "ACC008",
+      "type": "card_payment",
+      "merchant": "Zalando",
+      "amount": 210.00,
+      "currency": "EUR",
+      "timestamp": "2026-09-01T17:05:00",
+      "status": "completed"
+    },
+    {
+      "transaction_id": "TXN1014",
+      "account_id": "ACC002",
+      "type": "card_payment",
+      "merchant": "Netflix",
+      "amount": 15.99,
+      "currency": "USD",
+      "timestamp": "2026-09-06T00:01:00",
+      "status": "completed"
+    },
+    {
+      "transaction_id": "TXN1015",
+      "account_id": "ACC001",
+      "type": "refund",
+      "merchant": "Amazon",
+      "amount": -49.99,
+      "currency": "USD",
+      "timestamp": "2026-09-07T10:00:00",
+      "status": "completed"
+    },
+    {
+      "transaction_id": "TXN1016",
+      "account_id": "ACC003",
+      "type": "card_payment",
+      "merchant": "Unknown POS Terminal",
+      "amount": 300.00,
+      "currency": "USD",
+      "timestamp": "2026-09-06T23:59:00",
+      "status": "pending"
+    }
+  ],
+
+  "disputes": [
+    {
+      "dispute_id": "DSP001",
+      "customer_id": "CUST001",
+      "transaction_id": "TXN1001",
+      "reason": "duplicate_transaction",
+      "status": "open"
+    },
+    {
+      "dispute_id": "DSP002",
+      "customer_id": "CUST004",
+      "transaction_id": "TXN1009",
+      "reason": "unauthorized_transaction",
+      "status": "under_review"
+    },
+    {
+      "dispute_id": "DSP003",
+      "customer_id": "CUST004",
+      "transaction_id": "TXN1010",
+      "reason": "unauthorized_transaction",
+      "status": "under_review"
+    },
+    {
+      "dispute_id": "DSP004",
+      "customer_id": "CUST003",
+      "transaction_id": "TXN1007",
+      "reason": "duplicate_transaction",
+      "status": "resolved"
+    },
+    {
+      "dispute_id": "DSP005",
+      "customer_id": "CUST002",
+      "transaction_id": "TXN1004",
+      "reason": "service_not_received",
+      "status": "rejected"
+    },
+    {
+      "dispute_id": "DSP006",
+      "customer_id": "CUST006",
+      "transaction_id": "TXN1012",
+      "reason": "incorrect_amount",
+      "status": "open"
+    }
+  ]
+}
