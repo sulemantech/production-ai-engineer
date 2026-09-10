@@ -1,11 +1,13 @@
-from langgraph.graph import Graph, START, END
-from typing import TypedDict, List, Optional, Union
+from typing import TypedDict
 
 class InvestigationState(TypedDict):
     customer_id: str
-    account: dict
+    customer: dict
+    accounts: list
     transactions: list
-    disputes: list
     duplicate_found: bool
+    duplicate_transactions: list
+    disputes: list
+    disputed_transactions: list
     refund_eligible: bool
     confidence: float
