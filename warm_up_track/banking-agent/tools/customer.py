@@ -1,4 +1,5 @@
-from transactions import load_data
+from tools.transactions import load_data
+
 
 def lookup_customer(customer_id: str) -> dict:
     """
