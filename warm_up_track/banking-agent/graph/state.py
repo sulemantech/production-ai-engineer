@@ -6,5 +6,5 @@ class BankingAgentState(TypedDict):
     customer_id: str
     intent: str
     investigation_result: dict
-    decision: str
     response: str
+    outcome:str
