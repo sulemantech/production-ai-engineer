@@ -1,65 +1,59 @@
+import time
+
 from dtc_lookup import search_dtc
-from operator import add
 from vehicle_issues_lookup import fetch_recalls, fetch_complaints
 from vin_decoder import decode_vin_code
 from llm_client import call_llm_with_retries
 from IPython.display import Image, display
 
-
-
 from typing import Annotated
-from typing_extensions import TypedDict  # Or 'from typing import TypedDict' in Python 3.12+
-
+from typing_extensions import TypedDict
 
 from langgraph.graph import StateGraph, START, END
-from langgraph.graph.message import add_messages  # Changed to plural 'add_messages'
+from operator import add
+from langgraph.types import Command, interrupt
+from langgraph.checkpoint.sqlite import SqliteSaver
 
 
 # -----------------------------------------------------------------------------
-# Graph Flow
-#
-#                         ┌──────────────┐
-#                         │    START     │
-#                         └──────┬───────┘
-#                                │
-#                                ▼
-#                         ┌──────────────┐
-#                         │     MODEL    │
-#                         │              │
-#                         │ Decide what  │
-#                         │ to do next   │
-#                         └──────┬───────┘
-#                                │
-#                         should_continue()
-#                                │
-#                         ┌──────┴──────┐
-#                         │             │
-#                     "tools"          END
-#                         │             │
-#                         ▼             ▼
-#                  ┌──────────────┐   ┌─────┐
-#                  │     TOOLS    │   │ END │
-#                  │              │   └─────┘
-#                  │ Execute the  │
-#                  │ requested    │
-#                  │ Python tool  │
-#                  └──────┬───────┘
-#                         │
-#                         │ tool result
-#                         │
-#                         └──────────────► MODEL
-#
-# Main agent loop:
-#
-#              ┌─────────────────────────────┐
-#              │                             │
-#              ▼                             │
-#            MODEL → TOOLS → MODEL → TOOLS ──┘
-#              │
-#              └──────────────→ END
-#
-# The model keeps deciding whether it needs another tool.
-# Once it no longer requests a tool, the graph ends.
+'''
+                ┌──────────────┐
+                │    START     │
+                └──────┬───────┘
+                       │
+                       ▼
+                ┌──────────────┐
+                │    MODEL     │
+                │ call_model() │
+                └──────┬───────┘
+                       │
+              route_after_model
+                 /      |       \
+                /       |        \
+               ▼        ▼         ▼
+          "approval"  "tools"    END
+               │        │
+               ▼        │
+       ┌──────────────┐  │
+       │   HUMAN      │  │
+       │   APPROVAL   │  │
+       └──────┬───────┘  │
+              │          │
+     route_after_approval
+          /          \
+         /            \
+        ▼              ▼
+     "tools"          END
+        │
+        ▼
+   ┌──────────────┐
+   │    TOOLS     │
+   │execute_tools │
+   └──────┬───────┘
+          │
+          ▼
+        MODEL
+        '''
 # -----------------------------------------------------------------------------
 
 VEHICLE_TOOLS = [
@@ -168,9 +162,11 @@ TOOL_DISPATCHER = {
 
 class AgentState(TypedDict):  # Fixed 'TypeDict' to 'TypedDict'
     messages: Annotated[list, add]
+    approved:bool
 
 
 def call_model(state):
+    print("--- model node starting ---")
     response = call_llm_with_retries(
         state["messages"], 
         tools=VEHICLE_TOOLS
@@ -207,6 +203,7 @@ def execute_tools(state:AgentState):
         tool_input = block["input"]
         tool_use_id = block["id"]
         print(f"Executing tool: {tool_name}")
+        time.sleep(10)
         print(f"Input: {tool_input}")
         is_error = False
         tool_function = TOOL_DISPATCHER.get(tool_name, None)
@@ -240,6 +237,59 @@ def execute_tools(state:AgentState):
         ]
     }
 
+def human_approval(state: AgentState):
+
+    decision = interrupt({
+        "type": "approval",
+        "tool": "fetch_recalls",
+        "message": "Allow fetch_recalls to execute?"
+    })
+
+    return {
+        "approved": decision
+    }
+
+def handle_decline(state: AgentState):
+    return {
+        "messages": [{
+            "role": "user",
+            "content": (
+                "The user declined permission to execute fetch_recalls. "
+                "Do not attempt to call that tool. "
+                "Explain that recall information could not be retrieved "
+                "because permission was denied."
+            )
+        }],
+        "approved": False
+    }
+
+def route_after_approval(state: AgentState):
+    if state["approved"]:
+        return "tools"
+    return "decline"
+
+APPROVAL_REQUIRED_TOOLS = {
+    "fetch_recalls"
+}
+
+def route_after_model(state: AgentState):
+    content = state["messages"][-1]["content"]
+
+    has_tool = False
+
+    for block in content:
+        if block["type"] != "tool_use":
+            continue
+
+        has_tool = True
+
+        if block["name"] in APPROVAL_REQUIRED_TOOLS:
+            return "approval"
+
+    if has_tool:
+        return "tools"
+
+    return END
 #----------------------------------------------------------------------
 # Build graph
 #----------------------------------------------------------------------
@@ -256,14 +306,30 @@ graph.add_node(
     execute_tools
 )
 
+graph.add_node("human_approval", human_approval)
+
 graph.add_edge(START, "model")
+
+graph.add_node("handle_decline", handle_decline)
+
+graph.add_conditional_edges(
+    "human_approval",
+    route_after_approval,
+    {
+        "tools": "tools",
+        "decline": "handle_decline"
+    }
+)
+
+graph.add_edge("handle_decline", "model")
 
 graph.add_conditional_edges(
     "model",
-    should_continue,
+    route_after_model,
     {
-        "tools":"tools",
-        END:END,
+        "approval": "human_approval",
+        "tools": "tools",
+        END: END,
     }
 )
 
@@ -272,13 +338,79 @@ graph.add_edge(
     "model"
 )
 
-app = graph.compile()
+
 # display(Image(app.get_graph().draw_mermaid_png("day1_graph")), "")
 
 if __name__ == "__main__":
-    result = app.invoke({
-        "messages": [{"role": "user", "content": "What does DTC code P0171 mean?"}]
-    })
-    for msg in result["messages"]:
-        print(msg)
-    display(Image(app.get_graph().draw_mermaid_png(output_file_path="day1_graph.png")))
+
+    config = {
+        "configurable": {
+            "thread_id": "vehicle-approval-2"
+        }
+    }
+
+    DB_PATH = "checkpoints.db"
+
+    with SqliteSaver.from_conn_string(DB_PATH) as checkpointer:
+
+        checkpointer.setup()
+
+        app = graph.compile(
+            checkpointer=checkpointer
+        )
+
+        # ---------------------------------------------------------
+        # 1. Start the graph
+        # ---------------------------------------------------------
+
+        result = app.invoke(
+            {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Check recalls for a 2020 Toyota Corolla"
+                    }
+                ],
+                "approved": False
+            },
+            config=config
+        )
+
+        # ---------------------------------------------------------
+        # 2. Graph should now be paused at interrupt()
+        # ---------------------------------------------------------
+
+        if "__interrupt__" in result:
+
+            print("\n--- INTERRUPT ---")
+            print(result["__interrupt__"])
+
+            decision = input(
+                "Allow this tool to execute? (y/n): "
+            ).lower() in ("y", "yes")
+
+            # -----------------------------------------------------
+            # 3. Resume the SAME thread
+            # -----------------------------------------------------
+
+            result = app.invoke(
+                Command(resume=decision),
+                config=config
+            )
+
+        # ---------------------------------------------------------
+        # 4. Final result
+        # ---------------------------------------------------------
+
+        print("\n--- FINAL RESULT ---")
+
+        for msg in result["messages"]:
+            print(msg)
+
+        display(
+            Image(
+                app.get_graph().draw_mermaid_png(
+                    output_file_path="day1_graph.png"
+                )
+            )
+        )
