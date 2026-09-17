@@ -36,6 +36,8 @@
 from langgraph.graph import StateGraph, START, END
 from state import OrchestratorState
 from langgraph.types import RetryPolicy
+from langgraph.checkpoint.sqlite import SqliteSaver
+
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / "diagnostics_worker"))
@@ -91,6 +93,31 @@ graph.add_edge("fallback", END)
 
 
 app = graph.compile()
-if __name__ == "__main__":
-    result = app.invoke({"messages": [{"role": "user", "content": "My brakes are failing and I smell smoke"}]})
-    print(result["messages"][-1])
+
+with SqliteSaver.from_conn_string("checkpoints.db") as checkpointer:
+    checkpointer.setup()
+    app = graph.compile(checkpointer=checkpointer)
+    # move the __main__ test block inside this `with`
+
+    if __name__ == "__main__":
+        config = {"configurable": {"thread_id": "e2e-test-vague"}}
+
+        result = app.invoke({"messages": [{"role": "user", "content": "My brakes are failing and I smell smoke"}]}, config=config)
+        print(result["messages"][-1])
+
+        result = app.invoke({"messages": [{"role": "user", "content": "My car is running slow and experiencing poor acceleration response."}]},config=config)
+        print(result["messages"][-1])
+
+        config = {"configurable": {"thread_id": "e2e-test-vague-1"}}
+        result1 = app.invoke(
+                {"messages": [{"role": "user", "content": "What does DTC code P0171 mean?"}]},
+                config=config,
+            )
+        print("--- First response ---")
+        print(result1["messages"][-1])
+        result2 = app.invoke(
+            {"messages": [{"role": "user", "content": "Is that expensive to fix?"}]},    
+            config=config,
+        )
+        print("--- Second response (should reference the P0171 answer) ---")
+        print(result2["messages"][-1])
