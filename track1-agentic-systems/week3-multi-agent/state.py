@@ -5,3 +5,4 @@ from operator import add
 
 class OrchestratorState(TypedDict):
     messages: Annotated[list, add]
+    safety_critical: bool
