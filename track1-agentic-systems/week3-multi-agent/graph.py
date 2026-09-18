@@ -42,7 +42,7 @@ from langgraph.graph import StateGraph, START, END
 from state import OrchestratorState
 from langgraph.types import RetryPolicy
 from langgraph.checkpoint.sqlite import SqliteSaver
-
+from contextlib import contextmanager
 
 import sys
 from pathlib import Path
@@ -108,35 +108,83 @@ graph.add_edge("escalate", END)
 graph.add_edge("fallback", END)
 
 
-app = graph.compile()
+@contextmanager
+def build_app():
+    with SqliteSaver.from_conn_string("checkpoints.db") as checkpointer:
+        checkpointer.setup()
+        yield graph.compile(checkpointer=checkpointer)
 
-with SqliteSaver.from_conn_string("checkpoints.db") as checkpointer:
-    checkpointer.setup()
-    app = graph.compile(checkpointer=checkpointer)
-    # move the __main__ test block inside this `with`
 
-    if __name__ == "__main__":
+if __name__ == "__main__":
+    with build_app() as app:
+
         config = {"configurable": {"thread_id": "e2e-test-vague"}}
 
-        result = app.invoke({"messages": [{"role": "user", "content": "My brakes are failing and I smell smoke"}]}, config=config)
+        result = app.invoke(
+            {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "My brakes are failing and I smell smoke",
+                    }
+                ]
+            },
+            config=config,
+        )
         print(result["messages"][-1])
 
-        result = app.invoke({"messages": [{"role": "user", "content": "My car is running slow and experiencing poor acceleration response."}]},config=config)
+        result = app.invoke(
+            {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "My car is running slow and experiencing poor acceleration response.",
+                    }
+                ]
+            },
+            config=config,
+        )
         print(result["messages"][-1])
 
         config = {"configurable": {"thread_id": "e2e-test-vague-1"}}
+
         result1 = app.invoke(
-                {"messages": [{"role": "user", "content": "What does DTC code P0171 mean?"}]},
-                config=config,
-            )
+            {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "What does DTC code P0171 mean?",
+                    }
+                ]
+            },
+            config=config,
+        )
         print("--- First response ---")
         print(result1["messages"][-1])
+
         result2 = app.invoke(
-            {"messages": [{"role": "user", "content": "Is that expensive to fix?"}]},    
+            {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Is that expensive to fix?",
+                    }
+                ]
+            },
             config=config,
         )
         print("--- Second response (should reference the P0171 answer) ---")
         print(result2["messages"][-1])
 
-        result = app.invoke({"messages": [{"role": "user", "content": "my car is broken"}]}, config={"configurable": {"thread_id": "e2e-test-clarify"}})
+        result = app.invoke(
+            {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "my car is broken",
+                    }
+                ]
+            },
+            config={"configurable": {"thread_id": "e2e-test-clarify"}},
+        )
         print(result["messages"][-1])
