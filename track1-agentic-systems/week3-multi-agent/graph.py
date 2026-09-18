@@ -1,35 +1,40 @@
 '''
-                              START
+                                                      START
                                 │
                                 ▼
                          ┌──────────────┐
-                         │   "safety"   │  ← keyword check on raw user message
+                         │   "safety"   │  ← keyword check on raw message
                          └──────┬───────┘
                                 │
                     route_after_safety_check
                          ┌──────┴──────┐
                          │             │
-                    "escalate"   "diagnostics"
+                    "escalate"    "intake"
                          │             │
-                         ▼             ▼
-                  ┌───────────┐  ┌───────────────────────────────┐
-                  │ "escalate"│  │  "diagnostics" (subgraph)     │
-                  │  fixed    │  │  ← retry_policy(max_attempts=3)│
-                  │  urgent   │  │  [model ↔ tools ↔ approval]   │
-                  │  message  │  └──────────────┬────────────────┘
-                  └─────┬─────┘                 │
-                        │              validate_diagnostics_result
-                        │                 ┌──────┴──────┐
-                        │                 │             │
-                        │              "ok"        "invalid"
-                        │                 │             │
-                        │                 ▼             ▼
-                        │               END        ┌────────────┐
-                        │                          │ "fallback" │
-                        │                          └──────┬─────┘
-                        │                                 │
-                        ▼                                 ▼
-                       END                               END
+                         ▼      route_after_intake_check
+                  ┌───────────┐        ┌──────┴──────┐
+                  │ "escalate"│        │             │
+                  │  fixed    │   "clarify"    "diagnostics"
+                  │  urgent   │        │             │
+                  │  message  │        ▼             ▼
+                  └─────┬─────┘ ┌────────────┐ ┌───────────────────────────────┐
+                        │       │ "clarify"  │ │  "diagnostics" (subgraph)     │
+                        │       │  fixed ask │ │  ← retry_policy(max_attempts=3)│
+                        │       │  for detail│ │  [model ↔ tools ↔ approval]   │
+                        │       └─────┬──────┘ └──────────────┬────────────────┘
+                        │             │                       │
+                        │             │            validate_diagnostics_result
+                        │             │               ┌───────┴──────┐
+                        │             │               │              │
+                        │             │            "ok"         "invalid"
+                        │             │               │              │
+                        │             │               ▼              ▼
+                        │             │             END        ┌────────────┐
+                        │             │                        │ "fallback" │
+                        │             │                        └─────┬──────┘
+                        │             │                              │
+                        ▼             ▼                              ▼
+                       END           END                            END
 
 '''
 
@@ -38,6 +43,7 @@ from state import OrchestratorState
 from langgraph.types import RetryPolicy
 from langgraph.checkpoint.sqlite import SqliteSaver
 
+
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / "diagnostics_worker"))
@@ -45,6 +51,7 @@ sys.path.insert(0, str(Path(__file__).parent / "diagnostics_worker"))
 from diagnostics_worker.day1_graph import graph as diagnostics_worker_builder
 diagnostics_worker_graph = diagnostics_worker_builder.compile()
 from safety_check import safety_check, escalate, route_after_safety_check
+from intake_check import intake_check, ask_clarification, route_after_intake_check
 
 def validate_diagnostics_result(state):
     content = state["messages"][-1]["content"]
@@ -67,12 +74,20 @@ def handle_workder_failure(state):
 graph = StateGraph(OrchestratorState)
 
 
+graph.add_node("intake",intake_check)
+graph.add_node("clarify", ask_clarification)
 graph.add_node("diagnostics", diagnostics_worker_graph,retry_policy=RetryPolicy(max_attempts=3))
 graph.add_node("fallback", handle_workder_failure)
 graph.add_node("safety",safety_check)
 graph.add_node("escalate", escalate)
 
+graph.add_conditional_edges(
+    "intake",
+    route_after_intake_check,
+    {"clarify": "clarify", "diagnostics": "diagnostics"},
+)
 graph.add_edge(START, "safety")
+graph.add_edge("clarify", END)
 
 graph.add_conditional_edges(
     "diagnostics",
@@ -84,9 +99,10 @@ graph.add_conditional_edges(
     route_after_safety_check,
     {
         "escalate": "escalate",
-        "diagnostics": "diagnostics",
+        "diagnostics": "intake",
     },
 )
+
 graph.add_edge("escalate", END)
 
 graph.add_edge("fallback", END)
@@ -121,3 +137,6 @@ with SqliteSaver.from_conn_string("checkpoints.db") as checkpointer:
         )
         print("--- Second response (should reference the P0171 answer) ---")
         print(result2["messages"][-1])
+
+        result = app.invoke({"messages": [{"role": "user", "content": "my car is broken"}]}, config={"configurable": {"thread_id": "e2e-test-clarify"}})
+        print(result["messages"][-1])
