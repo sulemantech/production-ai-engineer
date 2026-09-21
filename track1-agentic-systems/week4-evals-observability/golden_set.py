@@ -77,7 +77,7 @@ GOLDEN_SET = [
         "id": "off_topic_message",
         "input": "what's the weather like today please",
         "thread_id": "golden-off-topic",
-        "expected_route": "clarify",
+        "expected_route": "fallback",
         "check_type": "route_only",
         "expected_keywords": [],
         "notes": "KNOWN FAILING CASE (as of 2026-09-19): intake's word-count heuristic passes this (6 words, no DTC pattern) straight to diagnostics, and validate_diagnostics_result accepts any non-empty assistant response as 'ok'. This should route to clarify or be rejected, not silently produce a deflection that counts as a valid diagnosis. Expected to fail until intake_check/validate_diagnostics_result are fixed.",

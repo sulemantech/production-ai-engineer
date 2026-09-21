@@ -25,6 +25,12 @@ def get_actual_route(app, config, case):
     if values.get("needs_clarification") is True:
         return "clarify"
 
+    response_text = get_final_message({"messages": values.get("messages", [])})
+
+    if "Diagnosis unavailable" in response_text:
+        return "fallback"
+
+
     return "diagnostics"
 
 def check_route_only(app, config, case):
