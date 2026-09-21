@@ -56,10 +56,16 @@ from intake_check import intake_check, ask_clarification, route_after_intake_che
 def validate_diagnostics_result(state):
     content = state["messages"][-1]["content"]
     role = state["messages"][-1]["role"]
-    if(content and role =="assistant"):
-        return "ok"
-    else:
+    if not (content and role == "assistant"):
         return "invalid"
+
+    tool_was_called = any(
+        block.get("type") == "tool_use"
+        for msg in state["messages"]
+        if msg["role"] == "assistant"
+        for block in (msg["content"] if isinstance(msg["content"], list) else [])
+    )
+    return "ok" if tool_was_called else "invalid"
     
 def handle_workder_failure(state):
     return {

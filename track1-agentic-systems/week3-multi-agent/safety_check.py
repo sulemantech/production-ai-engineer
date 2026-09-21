@@ -1,5 +1,5 @@
 
-SAFETY_KEYWORDS =["brake","failure","smoke","burning smell","fuel leak","overheating","no brakes"]
+SAFETY_KEYWORDS =["steering","brake","failure","smoke","burning smell","fuel leak","overheating","no brakes"]
 
 def safety_check(state):
     content = state["messages"][-1]["content"].lower()
