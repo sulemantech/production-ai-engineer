@@ -7,6 +7,7 @@ sys.path.insert(
 )
 
 from graph import build_app
+from llm_client import call_llm_with_retries
 from golden_set import GOLDEN_SET
 from langgraph.types import Command
 
@@ -92,18 +93,46 @@ def get_final_message(result):
 
 def check_llm_judge(response, case):
     """Evaluate the response using an LLM judge."""
+    messages = [
+        {
+            "role": "user",
+            "content": (
+                "You are grading an AI car-diagnostics assistant's response.\n\n"
+                f"User input: {case['input']}\n\n"
+                f"Assistant response: {response}\n\n"
+                f"Criteria: {case.get('judge_criteria', '')}\n\n"
+                "Does the response meet the criteria?\n"
+                "Answer with exactly 'PASS' or 'FAIL' on the first line, "
+                "then a one-sentence reason on the second line."
+            ),
+        }
+    ]
 
-    criteria = case.get("judge_criteria", [])
+    llm_response = call_llm_with_retries(
+        messages=messages,
+        max_tokens=100
+    )
 
-    # Day 2: inspect the response and criteria.
-    print("\n--- LLM Judge Input ---")
-    print("Case:", case["id"])
-    print("Response:", response)
-    print("Criteria:", criteria)
+    judge_text = llm_response.content[0].text.strip()
 
-    # Temporary until the actual judge is connected.
-    return True, f"response collected: {response[:150]}"
+    print("\n--- LLM Judge Output ---")
+    print(judge_text)
 
+    # Parse first line
+    lines = judge_text.splitlines()
+    verdict = lines[0].strip().upper() if lines else ""
+
+    # Everything after first line becomes the reason
+    reason = " ".join(line.strip() for line in lines[1:]).strip()
+
+    if verdict == "PASS":
+        return True, reason
+
+    if verdict == "FAIL":
+        return False, reason
+
+    # Unexpected judge output
+    return False, f"Invalid judge response: {judge_text}"
 
 def run_case(app, case):
     """Run one golden-set case against the real application."""
@@ -111,11 +140,16 @@ def run_case(app, case):
     config = {
         "configurable": {
             "thread_id": case["thread_id"]
-        }
+        },
+        "tags": [case["id"], "eval"],
+        "metadata": {
+            "case_id": case["id"],
+            "eval": True,
+        },
     }
 
     # First invocation.
-    result = app.invoke(
+    result = app.invoke(    
         {
             "messages": [
                 {

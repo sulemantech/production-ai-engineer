@@ -10,8 +10,17 @@ MODEL = "claude-haiku-4-5"
 MAX_RETRIES = 5
 BASE_DELAY = 1.0
 MAX_TOKENS = 1024
+from langsmith.wrappers import wrap_anthropic
 
 client = anthropic.Anthropic()
+try:
+    wrap_anthropic(client)
+except AttributeError:
+    # langsmith's wrap_anthropic still tries to patch the legacy
+    # `completions` API, which anthropic>=1.0 removed. It patches
+    # `messages.create` (the one we actually use) before hitting that,
+    # so the client is already traced by the time this fires.
+    pass
 
 
 def call_llm_with_retries(
