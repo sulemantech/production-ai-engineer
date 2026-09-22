@@ -40,7 +40,7 @@ def main():
 
     for run in runs:
         tokens = run.total_tokens or 0
-        cost = run.total_cost or 0.0
+        cost = float(run.total_cost or 0.0)
         duration = format_duration(
             run.start_time,
             run.end_time,
