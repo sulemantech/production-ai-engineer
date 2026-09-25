@@ -3,3 +3,4 @@ track1-agentic-systems/week1-raw-agent/data/
 __pycache__/
 *.db-shm
 *.db-wal
+track1-agentic-systems/week3-multi-agent/checkpoints.db
