@@ -166,6 +166,7 @@ VEHICLE_TOOLS = [
 
 ]
 
+TOKEN_BUDGET = 8000 # per-converstaion cap; may need to tune it after testing
 # -----------------------------------------------------------------------------
 # Tool dispatcher
 # -----------------------------------------------------------------------------
@@ -194,17 +195,24 @@ APPROVAL_REQUIRED_TOOLS = {
 class AgentState(TypedDict):  # Fixed 'TypeDict' to 'TypedDict'
     messages: Annotated[list, add]
     approved:bool
+    cumulative_tokens : Annotated[int, add]
 
 
 def call_model(state):
     print("--- model node starting ---")
+    if state.get("cumulative_tokens",0) >= TOKEN_BUDGET:
+        message ={ "role": "assistant",
+                  "content":[{"type":"text", "text": "Conversation halted, token budget exceeded."}]}
+        return {"messages": [message], "cumulative_tokens":0}
+    
     response = call_llm_with_retries(
         state["messages"], 
         tools=VEHICLE_TOOLS
         )
     content = [block.model_dump() for block in response.content]
     message = {"role": "assistant", "content": content}
-    return {"messages": [message]}
+    token_used = response.usage.input_tokens + response.usage.output_tokens
+    return {"messages": [message], "cumulative_tokens": token_used}
 
 
 #----------------------------------------------------------------------

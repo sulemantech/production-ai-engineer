@@ -1,5 +1,7 @@
 import random
 import time
+import threading
+
 
 import anthropic
 from dotenv import load_dotenv
@@ -22,6 +24,30 @@ except AttributeError:
     # so the client is already traced by the time this fires.
     pass
 
+class TokenBucketLimiter:
+    def __init__(self, rate: float, capacity: int):
+        self.rate = rate          # tokens added per second
+        self.capacity = capacity  # max burst size
+        self.tokens = capacity
+        self.last_refill = time.time()
+        self.lock = threading.Lock()
+
+    def acquire(self):
+        with self.lock:
+            now = time.time()
+            elapsed = now - self.last_refill
+            self.tokens = min(self.capacity, self.tokens + elapsed * self.rate)
+            self.last_refill = now
+
+            if self.tokens < 1:
+                wait_time = (1 - self.tokens) / self.rate
+                time.sleep(wait_time)
+                self.tokens = 0
+            else:
+                self.tokens -= 1
+
+
+_rate_limiter = TokenBucketLimiter(rate=0.5, capacity=3)
 
 def call_llm_with_retries(
     messages: list[dict],
@@ -32,6 +58,7 @@ def call_llm_with_retries(
     max_tokens: int = MAX_TOKENS,
 ) -> anthropic.types.Message:
 
+    _rate_limiter.acquire()
     for attempt in range(max_retries):
         try:
             response = client.messages.create(
@@ -63,3 +90,5 @@ def call_llm_with_retries(
     raise RuntimeError(
         f"LLM call failed after {max_retries} attempts"
     )
+
+
