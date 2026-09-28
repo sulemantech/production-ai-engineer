@@ -113,10 +113,11 @@ graph.add_edge("escalate", END)
 
 graph.add_edge("fallback", END)
 
-
+import os
+from langgraph.checkpoint.postgres import PostgresSaver
 @contextmanager
 def build_app():
-    with SqliteSaver.from_conn_string("checkpoints.db") as checkpointer:
+    with PostgresSaver.from_conn_string(os.environ["DATABASE_SESSION_POOLER_URL"]) as checkpointer:
         checkpointer.setup()
         yield graph.compile(checkpointer=checkpointer)
 
